@@ -1,0 +1,13 @@
+const encoder=new TextEncoder(), decoder=new TextDecoder();
+const encode=bytes=>btoa(Array.from(bytes,b=>String.fromCharCode(b)).join(''));
+const decode=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function key(password,salt){const material=await crypto.subtle.importKey('raw',encoder.encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+export async function encryptBackup(payload,password){if(password.length<12)throw new Error('Use uma senha de backup com pelo menos 12 caracteres.');const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv},await key(password,salt),encoder.encode(JSON.stringify(payload)));return {format:'camila-encrypted-v1',salt:encode(salt),iv:encode(iv),ciphertext:encode(new Uint8Array(ciphertext))};}
+export async function decryptBackup(envelope,password){try{if(envelope.format!=='camila-encrypted-v1')throw new Error();const salt=decode(envelope.salt),iv=decode(envelope.iv);if(salt.length!==16 || iv.length!==12)throw new Error();const data=await crypto.subtle.decrypt({name:'AES-GCM',iv},await key(password,salt),decode(envelope.ciphertext));return validateBackup(JSON.parse(decoder.decode(data)));}catch{throw new Error('Senha incorreta ou arquivo de backup inválido.');}}
+export function validateBackup(p){
+  const uuid=v=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+  if(p?.format!=='camila-data-v1'||!Array.isArray(p.patients)||!Array.isArray(p.sessions)||p.patients.length>10000||p.sessions.length>50000)throw new Error('Backup inválido.');
+  const ids=new Set();for(const x of p.patients){if(!uuid(x.id)||ids.has(x.id)||typeof x.name!=='string'||!x.name.trim()||x.name.length>200||typeof x.phone!=='string'||x.phone.length>40)throw new Error('Paciente inválido.');ids.add(x.id);}
+  const sessions=new Set();for(const s of p.sessions){if(!uuid(s.id)||sessions.has(s.id)||!ids.has(s.patientId)||typeof s.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s.date)||!Number.isSafeInteger(s.value)||s.value<=0||typeof s.paid!=='boolean'||typeof s.description!=='string'||s.description.length>500)throw new Error('Atendimento inválido.');sessions.add(s.id);if(s.evolution && (typeof s.evolution!=='object'||Array.isArray(s.evolution)||Object.entries(s.evolution).some(([k,v])=>!['complaint','assessment','procedures','response','plan'].includes(k)||typeof v!=='string'||v.length>10000)))throw new Error('Evolução inválida.');}
+  return p;
+}
