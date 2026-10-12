@@ -1,0 +1,9 @@
+export function totals(sessions, month) {
+  const selected = sessions.filter(s => s.date.startsWith(month));
+  return { received: selected.filter(s=>s.paid).reduce((n,s)=>n+s.value,0), pending: selected.filter(s=>!s.paid).reduce((n,s)=>n+s.value,0), count:selected.length };
+}
+export function parseMoney(value) {
+  const amount = Number(String(value).trim().replace(',','.'));
+  if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount*100) !== amount*100 && Math.abs(Math.round(amount*100)-amount*100)>0.000001) throw new Error('Informe um valor positivo com até duas casas decimais.');
+  return Math.round(amount*100);
+}
