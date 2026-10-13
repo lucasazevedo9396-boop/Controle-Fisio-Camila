@@ -1,11 +1,14 @@
 export class DemoStore {
   constructor(storage=localStorage) { this.storage=storage; this.key='camila-fisio-demo-v1'; this.role='therapist'; this.cloud=false; }
-  async load() { const s=JSON.parse(this.storage.getItem(this.key) || '{"patients":[],"sessions":[]}'); return {patients:s.patients,sessions:s.sessions}; }
+  async load() { const s=JSON.parse(this.storage.getItem(this.key) || '{"patients":[],"sessions":[]}'); return {patients:s.patients,sessions:s.sessions,progress:s.progress||[]}; }
   async change(fn) { const state=await this.load(); fn(state); this.storage.setItem(this.key,JSON.stringify(state)); }
-  async addPatient(p) { await this.change(s=>s.patients.push(p)); }
+  async addPatient(p,initial) { await this.change(s=>{s.patients.push(p);if(initial)s.progress.push({...initial,patientId:p.id});}); }
+  async addProgress(p) {await this.change(s=>s.progress.push(p));}
+  async removeSession(id) {await this.change(s=>{s.sessions.find(x=>x.id===id).deletedAt=new Date().toISOString();});}
+  async treatment(id,treatment) {await this.change(s=>{s.sessions.find(x=>x.id===id).treatment=treatment;});}
   async addSession(p) { await this.change(s=>s.sessions.push(p)); }
   async payment(id,paid) { await this.change(s=>{s.sessions.find(x=>x.id===id).paid=paid;}); }
-  async evolution(id,evolution) { await this.change(s=>{Object.assign(s.sessions.find(x=>x.id===id),{evolution,updatedAt:new Date().toISOString()});}); }
+  async evolution(id,evolution,version,score=null) { await this.change(s=>{Object.assign(s.sessions.find(x=>x.id===id),{evolution,evolutionScore:score,updatedAt:new Date().toISOString()});}); }
 }
 
 export class CloudStore {
@@ -39,16 +42,19 @@ export class CloudStore {
     for(let offset=0;;offset+=500){const rows=await this.request(`/rest/v1/${table}?select=*&clinic_id=eq.${this.clinicId}&order=id&limit=500&offset=${offset}`);all.push(...rows);if(rows.length<500)return all;}
   }
   async load(){
-    const [patients,sessions,evolutions]=await Promise.all([this.list('patients'),this.list('sessions'),this.role==='therapist'?this.list('evolutions'):Promise.resolve([])]);
-    return {patients:patients.map(p=>({id:p.id,name:p.name,phone:p.phone})),sessions:sessions.map(s=>({id:s.id,patientId:s.patient_id,date:s.date,value:s.value,description:s.description,paid:s.paid,version:s.version,evolution:evolutions.find(e=>e.session_id===s.id)?.notes || {},evolutionVersion:evolutions.find(e=>e.session_id===s.id)?.version ?? null}))};
+    const [patients,sessions,evolutions,progress]=await Promise.all([this.list('patients'),this.list('sessions'),this.role==='therapist'?this.list('evolutions'):Promise.resolve([]),this.role==='therapist'?this.list('patient_progress'):Promise.resolve([])]);
+    return {patients:patients.map(p=>({id:p.id,name:p.name,phone:p.phone})),progress:progress.map(p=>({id:p.id,patientId:p.patient_id,date:p.date,notes:p.notes,score:p.score})),sessions:sessions.map(s=>({id:s.id,patientId:s.patient_id,date:s.date,value:s.value,description:s.description,paid:s.paid,treatment:s.treatment||'physiotherapy',deletedAt:s.deleted_at,version:s.version,evolution:evolutions.find(e=>e.session_id===s.id)?.notes || {},evolutionScore:evolutions.find(e=>e.session_id===s.id)?.score ?? null,evolutionVersion:evolutions.find(e=>e.session_id===s.id)?.version ?? null}))};
   }
   async insert(table,body){return this.request('/rest/v1/'+table,{method:'POST',body:{...body,clinic_id:this.clinicId},prefer:'return=representation'});}
-  async addPatient(p){await this.insert('patients',p);}
-  async addSession(s){await this.insert('sessions',{id:s.id,patient_id:s.patientId,date:s.date,value:s.value,paid:s.paid,description:s.description});}
+  async addPatient(p,initial){await this.request('/rest/v1/rpc/create_patient',{method:'POST',body:{patient:{...p,clinicId:this.clinicId},initial:initial||null}});}
+  async addProgress(p){await this.insert('patient_progress',{id:p.id,patient_id:p.patientId,date:p.date,notes:p.notes,score:p.score});}
+  async addSession(s){await this.insert('sessions',{id:s.id,patient_id:s.patientId,date:s.date,value:s.value,paid:s.paid,description:s.description,treatment:s.treatment||'physiotherapy'});}
+  async removeSession(id,version){const rows=await this.request(`/rest/v1/sessions?id=eq.${id}&clinic_id=eq.${this.clinicId}&version=eq.${version}&deleted_at=is.null`,{method:'PATCH',body:{deleted_at:new Date().toISOString()},prefer:'return=representation'});if(!rows.length)throw new Error('Este atendimento mudou em outro aparelho. Atualize antes de excluir.');}
+  async treatment(id,treatment,version){const rows=await this.request(`/rest/v1/sessions?id=eq.${id}&clinic_id=eq.${this.clinicId}&version=eq.${version}&deleted_at=is.null`,{method:'PATCH',body:{treatment},prefer:'return=representation'});if(!rows.length)throw new Error('Este atendimento mudou em outro aparelho. Atualize antes de alterar.');}
   async payment(id,paid,version){const rows=await this.request(`/rest/v1/sessions?id=eq.${id}&clinic_id=eq.${this.clinicId}&version=eq.${version}`,{method:'PATCH',body:{paid},prefer:'return=representation'});if(!rows.length)throw new Error('Este atendimento mudou em outro aparelho. Atualize os registros e tente novamente.');}
-  async evolution(id,notes,version){
-    if(version===null){await this.insert('evolutions',{session_id:id,notes});return;}
-    const rows=await this.request(`/rest/v1/evolutions?session_id=eq.${id}&clinic_id=eq.${this.clinicId}&version=eq.${version}`,{method:'PATCH',body:{notes},prefer:'return=representation'});
+  async evolution(id,notes,version,score=null){
+    if(version===null){await this.insert('evolutions',{session_id:id,notes,score});return;}
+    const rows=await this.request(`/rest/v1/evolutions?session_id=eq.${id}&clinic_id=eq.${this.clinicId}&version=eq.${version}`,{method:'PATCH',body:{notes,score},prefer:'return=representation'});
     if(!rows.length)throw new Error('Esta ficha mudou em outro aparelho. Atualize os registros antes de editar novamente.');
   }
   async restore(payload){return this.request('/rest/v1/rpc/restore_backup',{method:'POST',body:{backup:payload}});}

@@ -6,7 +6,7 @@ O código está preparado para Supabase Auth e PostgreSQL com controle de acesso
 
 Entre em https://supabase.com/dashboard e crie um projeto. Escolha uma região próxima de vocês e defina uma senha forte para o banco, guardada em um gerenciador de senhas. Não envie essa senha no chat nem coloque no GitHub. Aguarde o projeto terminar de iniciar.
 
-No SQL Editor, execute o conteúdo completo de [supabase/schema.sql](supabase/schema.sql) uma única vez. Se houver erro, não continue: o script é transacional e só confirma quando todas as tabelas e regras de acesso forem criadas.
+No SQL Editor, execute o conteúdo completo de [supabase/schema.sql](supabase/schema.sql) uma única vez. Depois execute [supabase/upgrade-pilates-progress.sql](supabase/upgrade-pilates-progress.sql) para adicionar modalidades e evolução no cadastro. Se houver erro, não continue: cada script é transacional e só confirma quando suas alterações tiverem sido concluídas.
 
 ## 2. Criar e vincular as duas contas
 

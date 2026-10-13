@@ -1,0 +1,9 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {parseScore,progressPoints} from './public/progress.js';
+import {totals} from './public/finance.js';
+import {DemoStore} from './public/store.js';
+test('escala aceita zero, dez e decimal; vazio não inventa nota',()=>{assert.equal(parseScore('0'),0);assert.equal(parseScore('10'),10);assert.equal(parseScore('7,5'),7.5);assert.equal(parseScore(''),null);for(const v of ['-1','11','abc','1.23'])assert.throws(()=>parseScore(v));});
+test('gráfico combina cadastro e sessões sem incluir sessão excluída ou outro paciente',()=>{assert.deepEqual(progressPoints('a',{progress:[{patientId:'a',date:'2026-10-01',score:0}],sessions:[{patientId:'a',date:'2026-10-03',evolutionScore:8,treatment:'pilates'},{patientId:'a',date:'2026-10-02',evolutionScore:10,deletedAt:'2026-10-03'},{patientId:'b',date:'2026-10-01',evolutionScore:5}]}).map(p=>p.score),[0,8]);});
+test('financeiro separa modalidades, preserva legado e retira exclusões',()=>{const s=[{date:'2026-10-01',value:10000,paid:true},{date:'2026-10-01',value:5000,paid:false,treatment:'pilates'},{date:'2026-10-01',value:7000,paid:true,treatment:'pilates',deletedAt:'2026-10-02'}];assert.deepEqual(totals(s,'2026-10','pilates'),{received:0,pending:5000,count:1});assert.equal(totals(s,'2026-10','physiotherapy').received,10000);assert.equal(totals(s,'2026-10').count,2);});
+test('cadastro inicial é atômico e exclusão preserva histórico do paciente',async()=>{let disk=null;const s=new DemoStore({getItem:()=>disk,setItem:(k,v)=>disk=v});await s.addPatient({id:'a',name:'Teste',phone:''},{id:'p',date:'2026-10-01',notes:'Inicial',score:0});await s.addSession({id:'s',patientId:'a',date:'2026-10-01',value:10000,paid:true});await s.removeSession('s');const state=await s.load();assert.equal(state.progress[0].score,0);assert.ok(state.sessions[0].deletedAt);assert.equal(totals(state.sessions,'2026-10').received,0);});

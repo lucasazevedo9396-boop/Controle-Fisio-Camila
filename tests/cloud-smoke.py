@@ -4,13 +4,17 @@ from urllib.parse import urlparse, parse_qs
 from playwright.sync_api import sync_playwright, expect
 
 clinic='20000000-0000-4000-8000-000000000001'
-data={'patients':[], 'sessions':[], 'evolutions':[]}
+data={'patients':[], 'sessions':[], 'evolutions':[], 'patient_progress':[]}
 def api(route):
     req=route.request; path=urlparse(req.url).path; query=parse_qs(urlparse(req.url).query)
     body=json.loads(req.post_data or '{}'); result={}; status=200
     if path.endswith('/token'):
         result={'access_token':body.get('email','test-only'),'refresh_token':'test-refresh'}
     elif path.endswith('/user'): result={'id':req.headers.get('authorization','Bearer unknown')[7:],'email':req.headers.get('authorization','')[7:]}
+    elif path.endswith('/rpc/create_patient'):
+        patient=body['patient'];patient['clinic_id']=patient.pop('clinicId');data['patients'].append(patient);result=patient['id']
+        if body.get('initial'):
+            record=body['initial'];record.update({'patient_id':patient['id'],'clinic_id':clinic});data['patient_progress'].append(record)
     elif path.endswith('/logout'): status=204
     elif 'clinic_members' in path: result=[{'clinic_id':clinic,'role':'therapist'}]
     elif path.endswith('/rpc/export_backup'):
@@ -43,14 +47,21 @@ with sync_playwright() as p:
         return page
     a=device('camila@example.com');b=device('lucas@example.com')
     a.get_by_role('button',name='Pacientes',exact=True).click();a.get_by_role('button',name='Novo paciente',exact=True).click()
-    a.get_by_label('Nome completo').fill('Paciente compartilhado');a.get_by_role('button',name='Salvar',exact=True).click()
+    a.get_by_label('Nome completo').fill('Paciente compartilhado')
+    a.get_by_label('Evolução do paciente',exact=True).fill('Evolução inicial compartilhada')
+    a.get_by_label('Nota da condição funcional (0 a 10, opcional)',exact=True).fill('0')
+    a.get_by_role('button',name='Salvar',exact=True).click()
     expect(a.locator('#content').get_by_text('Paciente compartilhado',exact=True)).to_be_visible()
     a.get_by_role('button',name='Atendimentos',exact=True).click();a.get_by_role('button',name='Novo atendimento',exact=True).click()
     a.get_by_label('Valor (R$)').fill('120,50');a.get_by_role('button',name='Salvar',exact=True).click()
     expect(a.locator('#content').get_by_text('Pendente',exact=True)).to_be_visible()
     a.get_by_role('button',name='Evolução',exact=True).click();a.get_by_label('Queixa e relato do paciente').fill('Nota inicial fictícia');a.get_by_role('button',name='Salvar',exact=True).click()
     expect(a.locator('#modal')).not_to_be_visible()
-    b.get_by_role('button',name='Atualizar registros',exact=True).click();b.get_by_role('button',name='Atendimentos',exact=True).click()
+    b.get_by_role('button',name='Atualizar registros',exact=True).click();b.get_by_role('button',name='Pacientes',exact=True).click()
+    b.get_by_role('button',name='Ver histórico e evolução',exact=True).click()
+    expect(b.get_by_text('Evolução inicial compartilhada',exact=True)).to_be_visible()
+    expect(b.locator('svg.progress-chart circle')).to_have_count(1)
+    b.get_by_role('button',name='Atendimentos',exact=True).click()
     expect(b.locator('#content').get_by_text('Paciente compartilhado',exact=True)).to_be_visible()
     b.get_by_role('button',name='Registrar pagamento',exact=True).click();expect(b.locator('#content').get_by_text('Pago',exact=True)).to_be_visible()
     a.get_by_role('button',name='Evolução',exact=True).click()

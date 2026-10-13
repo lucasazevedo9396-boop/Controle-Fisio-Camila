@@ -1,5 +1,7 @@
 # Camila · Fisioterapia
 
+Para adicionar Pilates, exclusão de atendimentos, evolução no cadastro e gráfico de 0 a 10 ao banco existente, siga [ATUALIZAR-PILATES-EVOLUCAO.md](ATUALIZAR-PILATES-EVOLUCAO.md). Instalações novas também devem executar `supabase/upgrade-pilates-progress.sql` após `schema.sql`.
+
 Para gerar um endereço HTTPS e testar no iPhone, siga [TESTAR-NO-IPHONE.md](TESTAR-NO-IPHONE.md). Execute `npm run package` para criar o ZIP para publicação manual no Netlify. A configuração `netlify.toml` também permite publicar a pasta `public` a partir deste repositório quando ele estiver conectado à hospedagem.
 
 Aplicativo responsivo para Safari no iPhone e computadores. Cadastro de pacientes, atendimentos com valor individual, pagamento, resumo por mês da sessão, evolução clínica e backup protegido por senha. Sem bibliotecas externas. Para login e registros compartilhados, siga [ATIVAR-LOGIN.md](ATIVAR-LOGIN.md).

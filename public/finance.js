@@ -1,5 +1,5 @@
-export function totals(sessions, month) {
-  const selected = sessions.filter(s => s.date.startsWith(month));
+export function totals(sessions, month, treatment='all') {
+  const selected = sessions.filter(s => !s.deletedAt && s.date.startsWith(month) && (treatment==='all'||(s.treatment||'physiotherapy')===treatment));
   return { received: selected.filter(s=>s.paid).reduce((n,s)=>n+s.value,0), pending: selected.filter(s=>!s.paid).reduce((n,s)=>n+s.value,0), count:selected.length };
 }
 export function parseMoney(value) {
